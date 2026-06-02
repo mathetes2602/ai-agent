@@ -5,7 +5,7 @@ from google import genai
 from google.genai import types
 
 from prompts import system_prompt
-from call_functions import available_functions
+from call_functions import available_functions, call_function
 
 load_dotenv()
 api_key = os.environ.get("GEMINI_API_KEY")
@@ -13,13 +13,6 @@ if api_key == None:
     raise RuntimeError("api key not found")
 
 client = genai.Client(api_key=api_key)
-
-def main():
-    print("Hello from ai-agent!")
-
-
-if __name__ == "__main__":
-    main()
 
 parser = argparse.ArgumentParser(description="Chatbot")
 parser.add_argument("user_prompt", type=str, help="User prompt")
@@ -38,13 +31,21 @@ response = client.models.generate_content(
 if response.usage_metadata == None:
     raise RuntimeError("failed api request")
 
-if args.verbose:
-    print("User prompt: ", args.user_prompt)
-    print("Prompt tokens: ", response.usage_metadata.prompt_token_count)
-    print("Response tokens: ", response.usage_metadata.candidates_token_count)
-    print(response.text)
-elif response.function_calls != None:
+function_results = []
+if response.function_calls != None:
     for function_call in response.function_calls:
-        print(f"Calling function: {function_call.name}({function_call.args})")
+        function_call_result = call_function(function_call)
+        if len(function_call_result.parts) == 0:
+            raise Exception("Empty '.parts' list")
+        
+        if function_call_result.parts[0].function_response == None:
+            raise Exception("Function response is None")
+        
+        if function_call_result.parts[0].function_response.response == None:
+            raise Exception("Response object is None")
+        
+        function_results.append(function_call_result.parts[0])
+        if args.verbose:
+            print(f"-> {function_call_result.parts[0].function_response.response}")
 else:
     print(response.text)
